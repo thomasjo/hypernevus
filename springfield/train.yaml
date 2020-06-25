@@ -1,0 +1,46 @@
+kind: Job
+apiVersion: batch/v1
+metadata:
+  name: hypernevus-alt
+spec:
+  template:
+    spec:
+      # hostIPC: true
+      nodeName: apu
+      containers:
+      - name: hypernevus
+        image: thomasjo/hypernevus
+        workingDir: /storage/hypernevus
+        command:
+        # - python3
+        - bin/pyrun
+        - src/train_model.py
+        - --data-dir=/data/64
+        - --output-dir=output/bn
+        - --batch-size=512
+        stdin: true
+        tty: true
+        resources:
+          limits:
+            memory: "32Gi"
+            cpu: "4"
+        volumeMounts:
+        - name: storage
+          mountPath: /storage
+        - name: shm
+          mountPath: /dev/shm
+        - name: node-storage
+          mountPath: /data
+      volumes:
+      - name: storage
+        persistentVolumeClaim:
+          claimName: storage
+      - name: shm
+        emptyDir:
+          medium: Memory
+      - name: node-storage
+        hostPath:
+          path: /mnt/md0/tjo083
+          type: DirectoryOrCreate
+      restartPolicy: OnFailure
+  backoffLimit: 0

@@ -1,0 +1,10 @@
+.vscode/
+
+# Python cruft.
+.venv/
+.ipynb_checkpoints/
+*.egg-info/
+
+# Project-specific.
+/data
+/output

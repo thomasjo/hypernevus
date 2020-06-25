@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+
+set -eu
+
+args="$@"
+
+# Copy files from persistent storage to boost I/O performance.
+echo "Copying data... "
+rsync -avP --inplace --no-compress ./data/64 /data
+
+# Execute command.
+echo "Executing python with args"
+echo "  ${args}"
+python3 $args
+
+# Copy local results to persistent storage.
+# ...
