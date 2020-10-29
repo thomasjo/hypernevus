@@ -12,7 +12,8 @@ import torch.optim as optim
 import torchsummary
 import torchvision as vision
 
-from hypernevus.models import Autoencoder
+from hypernevus.models import Autoencoder, Autoencoder2
+from hypernevus.utils import show_image_grid
 
 
 class ECSLoss(nn.Module):
@@ -23,8 +24,10 @@ class ECSLoss(nn.Module):
         self.reduction = reduction
 
     def forward(self, input, target):
+        n_channels = input.size(1)
         cumulative_diff = torch.cumsum(input, dim=1) - torch.cumsum(target, dim=1)
         spatial_ecs = torch.sqrt(torch.sum(torch.square(cumulative_diff), dim=1))
+        spatial_ecs = spatial_ecs / (2 * n_channels)
         mean_ecs = torch.mean(spatial_ecs)
 
         return mean_ecs
@@ -65,9 +68,10 @@ def save_checkpoint(output_dir, model, optimizer, loss, epoch):
     torch.save(checkpoint, str(output_dir / f"epoch-{epoch + 1}.ckpt"))
 
 
-def plot_image_grid(axes, image, *, band):
-    image_grid = vision.utils.make_grid(torch.unsqueeze(image[:, band].detach(), 1))
-    axes.imshow(np.transpose(image_grid, axes=[1, 2, 0])[..., 0], vmin=0, vmax=1)
+def plot_image_grid(axes, image, *, band, vmin=0, vmax=1, cmap="viridis"):
+    # image_grid = vision.utils.make_grid(torch.unsqueeze(image[:, band].detach(), 1))
+    # axes.imshow(np.transpose(image_grid, axes=[1, 2, 0])[..., 0], vmin=0, vmax=1)
+    show_image_grid(image, axes, band, vmin, vmax, cmap)
 
 
 def save_reconstruction_vizualization(output_dir, model, test_image, epoch, device):
@@ -77,11 +81,14 @@ def save_reconstruction_vizualization(output_dir, model, test_image, epoch, devi
 
     image = image.cpu()
     reconstructed_image = reconstructed_image.cpu()
+    difference_image = image - reconstructed_image
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, dpi=300)
+    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, dpi=600)
     plot_image_grid(ax1, image, band=50)
     plot_image_grid(ax2, reconstructed_image, band=50)
-    fig.savefig(output_dir / f"epoch-{epoch + 1}.png", dpi=300)
+    plot_image_grid(ax3, difference_image, band=50, vmin=None, vmax=None, cmap="gray")
+    fig.tight_layout()
+    fig.savefig(output_dir / f"epoch-{epoch + 1}.png", dpi=600)
 
 
 def main(args):
@@ -97,13 +104,14 @@ def main(args):
 
     # Grab a batch of images that will be used for visualizing epoch results.
     test_image, _ = next(iter(dataloader))
+    test_image = test_image[:64]
 
     device = torch.device(args.device)
     autoencoder = Autoencoder(num_bands)
     autoencoder = autoencoder.to(device=device)
     optimizer = optim.Adam(autoencoder.parameters())
-    criterion = nn.BCELoss()
-    # criterion = ECSLoss()
+    # criterion = nn.BCELoss()
+    criterion = ECSLoss()
 
     torchsummary.summary(autoencoder, input_size=test_image.shape[1:], batch_size=args.batch_size, device=args.device)
 

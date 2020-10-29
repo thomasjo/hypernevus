@@ -1,0 +1,40 @@
+#!/usr/bin/env python3
+
+import sys
+from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
+from pathlib import Path
+
+import docker
+
+
+def print_log(log):
+    for chunk in log:
+        if "stream" in chunk:
+            sys.stdout.write(chunk["stream"])
+
+
+def main(args):
+    path = Path(".")
+    tag = f"{args.name}:{args.tag}"
+
+    try:
+        client = docker.from_env()
+        # output = client.api.build(path=str(path), tag=tag, rm=True, decode=True)
+        image, log = client.images.build(path=str(path), tag=tag, rm=True)
+    except docker.errors.BuildError as error:
+        print_log(error.build_log)
+        exit(1)
+    except docker.errors.APIError as error:
+        print("API error:", error.explanation)
+        exit(1)
+    else:
+        print_log(log)
+
+
+if __name__ == "__main__":
+    parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
+    parser.add_argument("--name", type=str, default="thomasjo/hypernevus", help="the name of the final image")
+    parser.add_argument("--tag", type=str, default="dev", help="a tag to append to image name")
+    args = parser.parse_args()
+
+    main(args)
