@@ -46,9 +46,6 @@ force_grid_wrap = 0
 include_trailing_comma = true
 line_length = 999
 lines_after_import = 2
-lines_between_types = 0
+lines_between_types = 1
 multi_line_output = 3
 use_parentheses = true
-
-known_pytorch = "torch, torchvision, torchsummary"
-sections = "FUTURE, STDLIB, THIRDPARTY, PYTORCH, FIRSTPARTY, LOCALFOLDER"
