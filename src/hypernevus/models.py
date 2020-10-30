@@ -10,7 +10,6 @@ class Autoencoder(nn.Module):
             nn.ReLU(inplace=True),
             nn.BatchNorm2d(64),
             nn.MaxPool2d(2, 2),
-
             nn.Conv2d(64, 32, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
             nn.BatchNorm2d(32),
@@ -22,7 +21,6 @@ class Autoencoder(nn.Module):
             nn.Conv2d(32, 64, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
             nn.BatchNorm2d(64),
-
             nn.Upsample(scale_factor=2),
             nn.Conv2d(64, num_bands, kernel_size=3, padding=1),
             nn.Sigmoid(),

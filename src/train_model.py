@@ -1,5 +1,3 @@
-import sys
-
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 from datetime import datetime
 from pathlib import Path
@@ -11,6 +9,10 @@ import torch.nn as nn
 import torch.optim as optim
 import torchsummary
 
+# from ignite.contrib.handlers import WandBLogger
+from ignite.engine import Engine, Events
+from ignite.handlers import ModelCheckpoint
+from ignite.utils import convert_tensor, setup_logger
 from torchvision.datasets import DatasetFolder
 from torchvision.utils import make_grid
 
@@ -29,43 +31,69 @@ def main(args):
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=True, pin_memory=True, num_workers=1)
 
     # Grab a batch of images that will be used for visualizing epoch results.
-    test_image, _ = next(iter(dataloader))
+    test_batch, _ = next(iter(dataloader))
 
     autoencoder = Autoencoder(num_bands).to(device=args.device)
     optimizer = optim.Adam(autoencoder.parameters())
     criterion = nn.BCELoss()
 
-    torchsummary.summary(autoencoder, input_size=test_image.shape[1:], batch_size=args.batch_size, device=str(args.device))
+    torchsummary.summary(autoencoder, input_size=test_batch.shape[1:], batch_size=args.batch_size, device=str(args.device))
 
     # Create timestamped output directory.
     timestamp = datetime.utcnow().strftime("%Y-%m-%d-%H%M")
     args.output_dir = args.output_dir / timestamp
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"Training model using dataset '{args.data_dir}'...")
-    for epoch in range(0, 50):
-        sys.stdout.write("epoch: {}\n".format(epoch + 1))
-        sys.stdout.flush()
-
-        train_loss = 0
+    def train_step(engine, batch):
         autoencoder.train()
-        for batch_idx, (image, _) in enumerate(dataloader):
-            sys.stdout.write("==> batch: {}\n".format(batch_idx + 1))
-            sys.stdout.flush()
+        optimizer.zero_grad()
 
-            optimizer.zero_grad()
-            image = image.to(device=args.device, non_blocking=True)
-            reconstructed_image = autoencoder(image)
-            loss = criterion(reconstructed_image, image)
-            loss.backward()
-            optimizer.step()
-            train_loss += loss.item()
+        x, y = prepare_batch(batch, args.device)
+        x_hat = autoencoder(x)
+        loss = criterion(x_hat, x)
 
-        sys.stdout.write(str(train_loss / len(dataloader.dataset)) + "\n")
-        sys.stdout.flush()
+        loss.backward()
+        optimizer.step()
 
-        save_checkpoint(autoencoder, optimizer, loss, epoch, args)
-        save_reconstruction_vizualization(autoencoder, test_image, epoch, args)
+        return x, x_hat, loss.item()
+
+    trainer = Engine(train_step)
+    trainer.logger = setup_logger("trainer")
+
+    @trainer.on(Events.ITERATION_COMPLETED(every=10))
+    def log_epoch_metrics(engine: Engine):
+        _, _, loss = engine.state.output
+        engine.logger.info(
+            "Epoch [{}] Iteration [{}/{}] Loss: {:.4f}".format(
+                engine.state.epoch,
+                engine.state.iteration,
+                engine.state.max_epochs * engine.state.epoch_length,
+                loss,
+            )
+        )
+
+    # Configure model checkpoints.
+    checkpoint_handler = ModelCheckpoint(str(args.output_dir), filename_prefix="ckpt", n_saved=None)
+    trainer.add_event_handler(Events.EPOCH_COMPLETED, checkpoint_handler, {"autoencoder": autoencoder})
+
+    # Visualize training progress using test patches.
+    @trainer.on(Events.EPOCH_COMPLETED)
+    def vizualize_reconstruction(engine: Engine):
+        x, x_hat = test_batch, autoencoder(test_batch)
+        fig, (ax1, ax2) = plt.subplots(1, 2, dpi=300)
+        plot_image_grid(ax1, x, band=50)
+        plot_image_grid(ax2, x_hat, band=50)
+        fig.savefig(args.output_dir / f"epoch-{engine.state.epoch + 1}.png", dpi=300)
+
+    trainer.run(dataloader, max_epochs=50)
+
+
+def prepare_batch(batch, device, non_blocking=True):
+    x, y = batch
+    return (
+        convert_tensor(x, device, non_blocking),
+        convert_tensor(y, device, non_blocking),
+    )
 
 
 def prepare_dataset(root_dir, bands):
