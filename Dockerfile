@@ -1,9 +1,6 @@
-FROM pytorch/pytorch:1.5.1-cuda10.1-cudnn7-runtime
+FROM pytorch/pytorch:1.7.0-cuda11.0-cudnn8-runtime
 
 RUN apt-get update && apt-get install --yes rsync
 
-WORKDIR /tmp
-ADD requirements.txt .
-RUN pip install --upgrade -r requirements.txt
-
-WORKDIR /root
+ADD requirements.txt /tmp/
+RUN pip install -r /tmp/requirements.txt
