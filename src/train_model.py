@@ -33,11 +33,11 @@ def main(args):
     # Grab a batch of images that will be used for visualizing epoch results.
     test_batch, _ = next(iter(dataloader))
 
-    autoencoder = Autoencoder(num_bands).to(device=args.device)
-    optimizer = optim.Adam(autoencoder.parameters())
+    model = Autoencoder(num_bands).to(device=args.device)
+    optimizer = optim.Adam(model.parameters())
     criterion = nn.BCELoss()
 
-    torchsummary.summary(autoencoder, input_size=test_batch.shape[1:], batch_size=args.batch_size, device=str(args.device))
+    torchsummary.summary(model, input_size=test_batch.shape[1:], batch_size=args.batch_size, device=str(args.device))
 
     # Create timestamped output directory.
     timestamp = datetime.utcnow().strftime("%Y-%m-%d-%H%M")
@@ -45,11 +45,11 @@ def main(args):
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     def train_step(engine, batch):
-        autoencoder.train()
+        model.train()
         optimizer.zero_grad()
 
         x, y = prepare_batch(batch, args.device)
-        x_hat = autoencoder(x)
+        x_hat = model(x)
         loss = criterion(x_hat, x)
 
         loss.backward()
@@ -74,12 +74,12 @@ def main(args):
 
     # Configure model checkpoints.
     checkpoint_handler = ModelCheckpoint(str(args.output_dir), filename_prefix="ckpt", n_saved=None)
-    trainer.add_event_handler(Events.EPOCH_COMPLETED, checkpoint_handler, {"autoencoder": autoencoder})
+    trainer.add_event_handler(Events.EPOCH_COMPLETED, checkpoint_handler, {"model": model})
 
     # Visualize training progress using test patches.
     @trainer.on(Events.EPOCH_COMPLETED)
     def vizualize_reconstruction(engine: Engine):
-        x, x_hat = test_batch, autoencoder(test_batch)
+        x, x_hat = test_batch, model(test_batch)
         fig, (ax1, ax2) = plt.subplots(1, 2, dpi=300)
         plot_image_grid(ax1, x, band=50)
         plot_image_grid(ax2, x_hat, band=50)
