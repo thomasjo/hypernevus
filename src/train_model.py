@@ -21,23 +21,26 @@ from hypernevus.models import Autoencoder
 
 def main(args):
     # TODO(thomasjo): Make this configurable?
-    bands, max_bands = slice(0, 115), 120
-    num_bands = len(range(*bands.indices(max_bands)))
+    ensure_reproducibility(seed=42)
 
     # TODO(thomasjo): Make this configurable?
-    ensure_reproducibility(seed=42)
+    bands = slice(0, 115)
 
     dataset = prepare_dataset(args.data_dir, bands)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=True, pin_memory=True, num_workers=1)
 
     # Grab a batch of images that will be used for visualizing epoch results.
     test_batch, _ = next(iter(dataloader))
+    test_batch = test_batch[:16]
+    test_batch = test_batch.to(device=args.device)
 
-    model = Autoencoder(num_bands).to(device=args.device)
+    input_size = test_batch.shape[1:]
+
+    model = Autoencoder(input_size).to(device=args.device)
     optimizer = optim.Adam(model.parameters())
     criterion = nn.BCELoss()
 
-    torchsummary.summary(model, input_size=test_batch.shape[1:], batch_size=args.batch_size, device=str(args.device))
+    torchsummary.summary(model, input_size=input_size, batch_size=args.batch_size, device=str(args.device))
 
     # Create timestamped output directory.
     timestamp = datetime.utcnow().strftime("%Y-%m-%d-%H%M")
@@ -81,10 +84,11 @@ def main(args):
     def vizualize_reconstruction(engine: Engine):
         x, x_hat = test_batch, model(test_batch)
         fig, (ax1, ax2) = plt.subplots(1, 2, dpi=300)
-        plot_image_grid(ax1, x, band=50)
-        plot_image_grid(ax2, x_hat, band=50)
-        fig.savefig(args.output_dir / f"epoch-{engine.state.epoch + 1}.png", dpi=300)
+        plot_image_grid(ax1, x, band=50, nrow=4)
+        plot_image_grid(ax2, x_hat, band=50, nrow=4)
+        fig.savefig(args.output_dir / f"epoch-{engine.state.epoch}.png", dpi=300)
 
+    # Start model optimization.
     trainer.run(dataloader, max_epochs=50)
 
 
@@ -118,34 +122,11 @@ def image_loader(bands):
     return _loader
 
 
-def save_checkpoint(model, optimizer, loss, epoch, args):
-    checkpoint = {
-        "epoch": epoch,
-        "model_state_dict": model.state_dict(),
-        "optimizer_state_dict": optimizer.state_dict(),
-        "loss": loss,
-    }
-
-    torch.save(checkpoint, args.output_dir / f"epoch-{epoch + 1}.ckpt")
-
-
-def save_reconstruction_vizualization(model, test_image, epoch, args):
-    with torch.no_grad():
-        image = test_image.to(device=args.device, non_blocking=True)
-        reconstructed_image = model(image)
-
-    image = image.cpu()
-    reconstructed_image = reconstructed_image.cpu()
-
-    fig, (ax1, ax2) = plt.subplots(1, 2, dpi=300)
-    plot_image_grid(ax1, image, band=50)
-    plot_image_grid(ax2, reconstructed_image, band=50)
-    fig.savefig(args.output_dir / f"epoch-{epoch + 1}.png", dpi=300)
-
-
-def plot_image_grid(axes, image, *, band):
-    image_grid = make_grid(torch.unsqueeze(image[:, band].detach(), 1))
+def plot_image_grid(axes, image, *, band, nrow=8):
+    image = image.detach().cpu()
+    image_grid = make_grid(torch.unsqueeze(image[:, band], 1), nrow=nrow)
     axes.imshow(np.transpose(image_grid, axes=[1, 2, 0])[..., 0], vmin=0, vmax=1)
+    axes.axis("off")
 
 
 def ensure_reproducibility(*, seed):
