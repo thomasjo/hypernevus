@@ -17,6 +17,7 @@ from torchvision.utils import make_grid
 
 from hypernevus.datasets import prepare_dataset
 from hypernevus.models import Autoencoder
+from hypernevus.utils import ensure_reproducibility
 
 
 def main(args):
@@ -105,14 +106,6 @@ def plot_image_grid(axes, image, *, band, nrow=8):
     image_grid = make_grid(torch.unsqueeze(image[:, band], 1), nrow=nrow)
     axes.imshow(np.transpose(image_grid, axes=[1, 2, 0])[..., 0], vmin=0, vmax=1)
     axes.axis("off")
-
-
-def ensure_reproducibility(*, seed):
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
 
 
 def parse_args():

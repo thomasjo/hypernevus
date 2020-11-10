@@ -14,10 +14,14 @@ from sklearn.decomposition import IncrementalPCA
 from torch.utils.data import DataLoader
 
 from hypernevus.datasets import prepare_dataset
+from hypernevus.utils import ensure_reproducibility
 
 
 def main(args: Namespace):
     logger = setup_logging()
+
+    # TODO(thomasjo): Make this configurable?
+    ensure_reproducibility(seed=42)
 
     # Create timestamped output directory.
     timestamp = datetime.utcnow().strftime("%Y-%m-%d-%H%M")
