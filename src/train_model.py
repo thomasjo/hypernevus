@@ -13,9 +13,9 @@ import torchsummary
 from ignite.engine import Engine, Events
 from ignite.handlers import ModelCheckpoint
 from ignite.utils import convert_tensor, setup_logger
-from torchvision.datasets import DatasetFolder
 from torchvision.utils import make_grid
 
+from hypernevus.datasets import prepare_dataset
 from hypernevus.models import Autoencoder
 
 
@@ -98,28 +98,6 @@ def prepare_batch(batch, device, non_blocking=True):
         convert_tensor(x, device, non_blocking),
         convert_tensor(y, device, non_blocking),
     )
-
-
-def prepare_dataset(root_dir, bands):
-    def is_valid_hsi_file(file_path: str):
-        file_path = Path(file_path)
-        allowed_parents = ["ak", "amh", "bcc", "mb", "mm", "scc", "sk"]
-        return file_path.parent.name in allowed_parents and file_path.suffix == ".npy"
-
-    dataset = DatasetFolder(str(root_dir), image_loader(bands), is_valid_file=is_valid_hsi_file)
-
-    return dataset
-
-
-def image_loader(bands):
-    def _loader(file_path):
-        hsi = np.load(file_path)
-        hsi = hsi[..., bands]
-        hsi = np.transpose(hsi, axes=[2, 0, 1])
-        hsi = np.clip(hsi, 0, 1)
-        return hsi
-
-    return _loader
 
 
 def plot_image_grid(axes, image, *, band, nrow=8):
