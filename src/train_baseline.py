@@ -2,6 +2,7 @@ import logging
 import warnings
 
 from argparse import ArgumentParser, HelpFormatter, Namespace
+from copy import copy
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -20,41 +21,49 @@ from hypernevus.utils import ensure_reproducibility
 def main(args: Namespace):
     logger = setup_logging()
 
-    # TODO(thomasjo): Make this configurable?
-    ensure_reproducibility(seed=42)
-
     # Create timestamped output directory.
     timestamp = datetime.utcnow().strftime("%Y-%m-%d-%H%M")
     args.output_dir = args.output_dir / timestamp
     args.output_dir.mkdir(parents=True, exist_ok=True)
+    root_output_dir = copy(args.output_dir)
 
     if args.restart_dir:
         logger.info("Running in restart mode: {}".format(args.restart_dir))
 
-    # Prepare dataloader.
-    dataloader = prepare_dataloader(args)
+    for run_idx in range(args.repetitions):
+        logger.info("Starting run {}".format(run_idx + 1))
 
-    # Initialize PCA for dataset.
-    pca = compute_pca(dataloader, args, logger)
+        # Create run-specific output directory.
+        args.output_dir = root_output_dir / "run-{:02d}".format(run_idx + 1)
+        args.output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Save PCA state to allow both reuse and restart.
-    joblib.dump(pca, args.output_dir / "pca.joblib")
+        # TODO(thomasjo): Make this configurable?
+        ensure_reproducibility(seed=42 + run_idx)
 
-    explained_variance = np.sum(pca.explained_variance_ratio_)
-    logger.info("Explained variance with PCA: {:.2f}".format(explained_variance * 100))
+        # Prepare dataloader.
+        dataloader = prepare_dataloader(args)
 
-    # Cluster dataset using (PCA transformed) batches of data.
-    logger.info("Clustering dataset...")
-    kmeans = MiniBatchKMeans(n_clusters=args.clusters)
-    kmeans_pca = MiniBatchKMeans(n_clusters=args.clusters)
-    for batch_num, (x, y) in enumerate(dataloader, start=1):
-        logger.info("Batch [{}]".format(batch_num))
-        kmeans.partial_fit(x.flatten(start_dim=1))
-        kmeans_pca.partial_fit(pca.transform(x.flatten(start_dim=1)))
+        # Initialize PCA for dataset.
+        pca = compute_pca(dataloader, args, logger)
 
-    # Save model state.
-    joblib.dump(kmeans, args.output_dir / "kmeans.joblib")
-    joblib.dump(kmeans_pca, args.output_dir / "kmeans_pca.joblib")
+        # Save PCA state to allow both reuse and restart.
+        joblib.dump(pca, args.output_dir / "pca.joblib")
+
+        explained_variance = np.sum(pca.explained_variance_ratio_)
+        logger.info("Explained variance with PCA: {:.2f}".format(explained_variance * 100))
+
+        # Cluster dataset using (PCA transformed) batches of data.
+        logger.info("Clustering dataset...")
+        kmeans = MiniBatchKMeans(n_clusters=args.clusters)
+        kmeans_pca = MiniBatchKMeans(n_clusters=args.clusters)
+        for batch_num, (x, y) in enumerate(dataloader, start=1):
+            logger.info("Batch [{}]".format(batch_num))
+            kmeans.partial_fit(x.flatten(start_dim=1))
+            kmeans_pca.partial_fit(pca.transform(x.flatten(start_dim=1)))
+
+        # Save model state.
+        joblib.dump(kmeans, args.output_dir / "kmeans.joblib")
+        joblib.dump(kmeans_pca, args.output_dir / "kmeans_pca.joblib")
 
 
 def compute_pca(dataloader: DataLoader, args: Namespace, logger: logging.Logger):
