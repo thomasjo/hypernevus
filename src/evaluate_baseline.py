@@ -52,25 +52,23 @@ def main(args: Namespace):
         output_dir = args.output_dir / prefix
         output_dir.mkdir(parents=True, exist_ok=True)
 
+        paths = sorted(list(args.data_dir.rglob(f"{prefix}*.npy")))
+        patches = np.stack([load_image(str(path)) for path in paths]).astype(np.double)
+        n, h, w, c = patches.shape
+
         # Iterate over each run.
         for run_dir in run_dirs:
             print(f" -> {run_dir.stem}")
 
             pca = joblib.load(run_dir / "pca.joblib")
+            patches_pca = pca.transform(patches.reshape((n, h * w * c)))
+
             km, km_pca = load_kmeans(run_dir)
-
-            paths = sorted(list(args.data_dir.rglob(f"{prefix}*.npy")))
-            patches = np.stack([load_image(str(path)) for path in paths]).astype(np.double)
-            n, h, w, c = patches.shape
-            patches = patches.reshape((n, h * w * c))
-            patches_pca = pca.transform(patches)
-
-            clusters = km.predict(patches)
+            clusters = km.predict(patches.reshape((n, h * w * c)))
             clusters_pca = km_pca.predict(patches_pca)
 
-            patches = patches.reshape(n, h, w, c)
-            save_cluster_image(patches, clusters, paths, output_dir / "{}.png".format(run_dir.stem))
-            save_cluster_image(patches, clusters_pca, paths, output_dir / "pca--{}.png".format(run_dir.stem))
+            save_cluster_image(patches.reshape(n, h, w, c), clusters, paths, output_dir / "{}.png".format(run_dir.stem))
+            save_cluster_image(patches.reshape(n, h, w, c), clusters_pca, paths, output_dir / "pca--{}.png".format(run_dir.stem))
 
 
 def save_cluster_image(images, clusters, paths, output_file):
