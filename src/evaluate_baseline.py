@@ -56,6 +56,8 @@ def main(args: Namespace):
         patches = np.stack([load_image(str(path)) for path in paths]).astype(np.double)
         n, h, w, c = patches.shape
 
+        all_labels = []
+
         # Iterate over each run.
         for run_dir in run_dirs:
             print(f" -> {run_dir.stem}")
@@ -64,14 +66,38 @@ def main(args: Namespace):
             patches_pca = pca.transform(patches.reshape((n, h * w * c)))
 
             km, km_pca = load_kmeans(run_dir)
-            clusters = km.predict(patches.reshape((n, h * w * c)))
-            clusters_pca = km_pca.predict(patches_pca)
+            labels = km.predict(patches.reshape((n, h * w * c)))
+            labels_pca = km_pca.predict(patches_pca)
 
-            save_cluster_image(patches.reshape(n, h, w, c), clusters, paths, output_dir / "{}.png".format(run_dir.stem))
-            save_cluster_image(patches.reshape(n, h, w, c), clusters_pca, paths, output_dir / "pca--{}.png".format(run_dir.stem))
+            if len(all_labels) > 0:
+                # Grab previous cluster predictions.
+                prev, prev_pca = all_labels[-1]
+                prev_clusters = [prev == label_id for label_id in range(km.n_clusters)]
+
+                # Compare each cluster against all clusters from previous run.
+                new_labels = []
+                for label_id in range(km.n_clusters):
+                    cluster = labels == label_id
+                    new_label_id = np.argmax([np.mean(np.equal(cluster, prev_cluster)) for prev_cluster in prev_clusters])
+                    new_labels.append((new_label_id, cluster))
+
+                # Re-assign cluster labels to ensure consistency between run predictions.
+                for new_label_id, cluster in new_labels:
+                    labels[cluster] = new_label_id
+
+            # Save cluster predictions.
+            all_labels.append((labels, labels_pca))
+
+            save_cluster_image(patches.reshape(n, h, w, c), labels, paths, output_dir / "{}.png".format(run_dir.stem))
+            # save_cluster_image(patches.reshape(n, h, w, c), labels_pca, paths, output_dir / "pca--{}.png".format(run_dir.stem))
+
+        break  # HACK(thomasjo): DEBUG
+
+        # Iterate over all pair-wise combinations.
+        # for run_a, run_b in combinations(run_dir, 2):
 
 
-def save_cluster_image(images, clusters, paths, output_file):
+def save_cluster_image(images, labels, paths, output_file):
     cm = matplotlib.cm.get_cmap("gray")
 
     alpha = round(0.33 * 255)
@@ -88,7 +114,7 @@ def save_cluster_image(images, clusters, paths, output_file):
     # img_data = np.zeros(img_shape)
     img = Image.new("RGBA", img_shape, bg_color)
 
-    for image, label, image_file in zip(images, clusters, paths):
+    for image, label, image_file in zip(images, labels, paths):
         # Read row and column info from filename.
         xi, yi = image_file.stem.split("--")[1].split("-")
         row_idx, col_idx = int(yi), int(xi)
