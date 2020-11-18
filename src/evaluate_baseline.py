@@ -83,6 +83,10 @@ def main(args: Namespace):
             save_cluster_image(patches.reshape(n, h, w, c), labels, paths, output_dir / "{}.png".format(run_dir.stem))
             save_cluster_image(patches.reshape(n, h, w, c), labels_pca, paths, output_dir / "pca--{}.png".format(run_dir.stem))
 
+        # Create visualization of cluster variations.
+        save_change_image(patches.reshape(n, h, w, c), all_labels, paths, output_dir / "changes.png")
+        save_change_image(patches.reshape(n, h, w, c), all_labels_pca, paths, output_dir / "pca--changes.png")
+
         # break  # HACK(thomasjo): DEBUG
 
         # Iterate over all pair-wise combinations.
@@ -137,6 +141,20 @@ def save_cluster_image(images, labels, paths, output_file, label_colors=LABEL_CO
         img.paste(temp, ((32 + pad) * col_idx + (pad // 2), (32 + pad) * row_idx + (pad // 2)))
 
     img.save(output_file)
+
+
+def save_change_image(images, all_labels, paths, output_file):
+    # Colors for changed cluster labels.
+    label_colors = {
+        0: (0, 0, 0, 0),  # The "no change" label has a transparent color
+        1: (255, 0, 0, round(0.3 * 255)),
+    }
+
+    label_changes = np.sum([np.not_equal(a, b) for a, b in combinations(all_labels, 2)], axis=0)
+    change_labels = np.clip(label_changes, 0, 1)
+    print("  # changes:", np.count_nonzero(change_labels))
+
+    save_cluster_image(images, change_labels, paths, output_file, label_colors)
 
 
 def load_kmeans(state_dir: Path):
