@@ -4,27 +4,29 @@ import warnings
 from argparse import ArgumentParser, HelpFormatter, Namespace
 from datetime import datetime
 from itertools import combinations, groupby
+from math import ceil
 from pathlib import Path
 from typing import Optional
 
 import joblib
+import matplotlib.cm
 import numpy as np
 
-from sklearn.cluster import MiniBatchKMeans
-from sklearn.decomposition import IncrementalPCA
+from PIL import Image
 from torch.utils.data import DataLoader
 
-from math import ceil
-import matplotlib.cm
-from PIL import Image, ImageDraw, ImagePath, ImageColor, ImageMode
-
-
-from hypernevus.datasets import prepare_dataset, image_loader
+from hypernevus.datasets import image_loader, prepare_dataset
 from hypernevus.utils import ensure_reproducibility
+
+BACKGROUND_COLOR = (0, 0, 0, 255)
+LABEL_COLORS = {
+    0: (200, 200, 200, 0),
+    1: (0, 255, 255, round(0.33 * 255)),
+}
 
 
 def main(args: Namespace):
-    logger = setup_logging()
+    # logger = setup_logging()
 
     # TODO(thomasjo): Make this configurable?
     ensure_reproducibility(seed=42)
@@ -57,6 +59,7 @@ def main(args: Namespace):
         n, h, w, c = patches.shape
 
         all_labels = []
+        all_labels_pca = []
 
         # Iterate over each run.
         for run_dir in run_dirs:
@@ -69,49 +72,51 @@ def main(args: Namespace):
             labels = km.predict(patches.reshape((n, h * w * c)))
             labels_pca = km_pca.predict(patches_pca)
 
-            if len(all_labels) > 0:
-                # Grab previous cluster predictions.
-                prev, prev_pca = all_labels[-1]
-                prev_clusters = [prev == label_id for label_id in range(km.n_clusters)]
-
-                # Compare each cluster against all clusters from previous run.
-                new_labels = []
-                for label_id in range(km.n_clusters):
-                    cluster = labels == label_id
-                    new_label_id = np.argmax([np.mean(np.equal(cluster, prev_cluster)) for prev_cluster in prev_clusters])
-                    new_labels.append((new_label_id, cluster))
-
-                # Re-assign cluster labels to ensure consistency between run predictions.
-                for new_label_id, cluster in new_labels:
-                    labels[cluster] = new_label_id
+            # Re-assign cluster labels to ensure consistency between run predictions.
+            labels = find_consistent_labels(labels, all_labels, km.n_clusters)
+            labels_pca = find_consistent_labels(labels_pca, all_labels_pca, km_pca.n_clusters)
 
             # Save cluster predictions.
-            all_labels.append((labels, labels_pca))
+            all_labels.append(labels)
+            all_labels_pca.append(labels_pca)
 
             save_cluster_image(patches.reshape(n, h, w, c), labels, paths, output_dir / "{}.png".format(run_dir.stem))
-            # save_cluster_image(patches.reshape(n, h, w, c), labels_pca, paths, output_dir / "pca--{}.png".format(run_dir.stem))
+            save_cluster_image(patches.reshape(n, h, w, c), labels_pca, paths, output_dir / "pca--{}.png".format(run_dir.stem))
 
-        break  # HACK(thomasjo): DEBUG
+        # break  # HACK(thomasjo): DEBUG
 
         # Iterate over all pair-wise combinations.
         # for run_a, run_b in combinations(run_dir, 2):
 
 
-def save_cluster_image(images, labels, paths, output_file):
+def find_consistent_labels(labels, all_labels, n_clusters):
+    if not all_labels:
+        return labels
+
+    # Grab previous cluster predictions.
+    prev_labels = all_labels[-1]
+    prev_clusters = [prev_labels == label_id for label_id in range(n_clusters)]
+
+    # Compare each cluster against all clusters from previous run.
+    new_labels = []
+    for label_id in range(n_clusters):
+        cluster = labels == label_id
+        new_label_id = np.argmax([np.mean(np.equal(cluster, prev_cluster)) for prev_cluster in prev_clusters])
+        new_labels.append((new_label_id, cluster))
+
+    # Re-assign cluster labels to ensure consistency between run predictions.
+    for new_label_id, cluster in new_labels:
+        labels[cluster] = new_label_id
+
+    return labels
+
+
+def save_cluster_image(images, labels, paths, output_file, label_colors=LABEL_COLORS, bg_color=BACKGROUND_COLOR):
     cm = matplotlib.cm.get_cmap("gray")
-
-    alpha = round(0.33 * 255)
-    bg_color = (0, 0, 0, 255)
-    label_colors = {
-        0: (200, 200, 200, 0),
-        1: (0, 255, 255, alpha),
-    }
-
     band_idx = 50
 
     pad = 1
     img_shape = ((32 + pad) * 32 + pad, (32 + pad) * 32 + pad)
-    # img_data = np.zeros(img_shape)
     img = Image.new("RGBA", img_shape, bg_color)
 
     for image, label, image_file in zip(images, labels, paths):
@@ -119,29 +124,17 @@ def save_cluster_image(images, labels, paths, output_file):
         xi, yi = image_file.stem.split("--")[1].split("-")
         row_idx, col_idx = int(yi), int(xi)
 
+        # Make a single-band image patch.
         band_image = np.clip(cm(image[..., band_idx]) * 255, 0, 255).astype(np.uint8)
-
         temp = Image.new("RGBA", ((32 + pad, 32 + pad)), bg_color)
         temp.paste(Image.fromarray(band_image, mode="RGBA"), (ceil(pad / 2), ceil(pad / 2)))
 
+        # Overlay patch image with label color.
         overlay = Image.new("RGBA", temp.size, label_colors[label])
         temp = Image.alpha_composite(temp, overlay)
 
+        # Add patch image to the full image.
         img.paste(temp, ((32 + pad) * col_idx + (pad // 2), (32 + pad) * row_idx + (pad // 2)))
-
-    # Draw ROI rectangle.
-    # source_dir = Path("/run/media/thomasjo/research-data/hypernevus-cropped")
-    # source_npz = next(source_dir.rglob(f"{image_shasum}*.npz"))
-    # with np.load(source_npz) as npz:
-    #     roi = npz["roi"]
-    #     rgb = npz["rgb"]
-    # mask = np.all(roi - np.array([1, 0, 0]) == np.array([0, 0, 0]), axis=2)
-    # rows = np.any(mask, axis=1)
-    # cols = np.any(mask, axis=0)
-    # rmin, rmax = np.argmax(rows), mask.shape[0] - 1 - np.argmax(np.flipud(rows))
-    # cmin, cmax = np.argmax(cols), mask.shape[1] - 1 - np.argmax(np.flipud(cols))
-    # draw = ImageDraw.Draw(img)
-    # draw.rectangle([cmin, rmin, cmax, rmax], outline="red", width=2)
 
     img.save(output_file)
 
