@@ -13,6 +13,7 @@ import matplotlib.cm
 import numpy as np
 
 from PIL import Image
+from sklearn.metrics.cluster import normalized_mutual_info_score
 from torch.utils.data import DataLoader
 
 from hypernevus.datasets import image_loader, prepare_dataset
@@ -61,6 +62,9 @@ def main(args: Namespace):
         all_labels = []
         all_labels_pca = []
 
+        all_metrics = []
+        all_metrics_pca = []
+
         # Iterate over each run.
         for run_dir in run_dirs:
             print(f" -> {run_dir.stem}")
@@ -87,10 +91,31 @@ def main(args: Namespace):
         save_change_image(patches.reshape(n, h, w, c), all_labels, paths, output_dir / "changes.png")
         save_change_image(patches.reshape(n, h, w, c), all_labels_pca, paths, output_dir / "pca--changes.png")
 
-        # break  # HACK(thomasjo): DEBUG
+        # Compute pair-wise clustering scores for all run combinations.
+        nmi = np.stack([normalized_mutual_info_score(a, b) for a, b in combinations(all_labels, 2)])
+        all_metrics.append(nmi)
+        print("- mean:", np.mean(nmi, axis=0))
+        print("- std: ", np.var(nmi, axis=0))
 
-        # Iterate over all pair-wise combinations.
-        # for run_a, run_b in combinations(run_dir, 2):
+        nmi_pca = np.stack([normalized_mutual_info_score(a, b) for a, b in combinations(all_labels_pca, 2)])
+        all_metrics_pca.append(nmi_pca)
+        print("- mean:", np.mean(nmi_pca, axis=0))
+        print("- std: ", np.var(nmi_pca, axis=0))
+
+    print("-" * 80)
+
+    # Print statistics for combined metrics.
+    nmi = np.stack(all_metrics, axis=0)
+    # print("mean:", np.mean(nmi, axis=0))
+    # print("std: ", np.var(nmi, axis=0))
+    print("mean:", np.mean(nmi))
+    print("std: ", np.var(nmi))
+
+    nmi_pca = np.stack(all_metrics_pca, axis=0)
+    # print("mean:", np.mean(nmi_pca, axis=0))
+    # print("std: ", np.var(nmi_pca, axis=0))
+    print("mean:", np.mean(nmi_pca))
+    print("std: ", np.var(nmi_pca))
 
 
 def find_consistent_labels(labels, all_labels, n_clusters):
