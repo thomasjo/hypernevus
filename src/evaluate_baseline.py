@@ -1,12 +1,10 @@
 import logging
-import warnings
 
 from argparse import ArgumentParser, HelpFormatter, Namespace
 from datetime import datetime
 from itertools import combinations, groupby
 from math import ceil
 from pathlib import Path
-from typing import Optional
 
 import joblib
 import matplotlib.cm
@@ -93,27 +91,23 @@ def main(args: Namespace):
 
         # Compute pair-wise clustering scores for all run combinations.
         nmi = np.stack([normalized_mutual_info_score(a, b) for a, b in combinations(all_labels, 2)])
+        nmi_pca = np.stack([normalized_mutual_info_score(a, b) for a, b in combinations(all_labels_pca, 2)])
         all_metrics.append(nmi)
+        all_metrics_pca.append(nmi_pca)
+
         print("- mean:", np.mean(nmi, axis=0))
         print("- std: ", np.var(nmi, axis=0))
-
-        nmi_pca = np.stack([normalized_mutual_info_score(a, b) for a, b in combinations(all_labels_pca, 2)])
-        all_metrics_pca.append(nmi_pca)
         print("- mean:", np.mean(nmi_pca, axis=0))
         print("- std: ", np.var(nmi_pca, axis=0))
 
     print("-" * 80)
 
-    # Print statistics for combined metrics.
+    # Calculate statistics for metrics from all runs.
     nmi = np.stack(all_metrics, axis=0)
-    # print("mean:", np.mean(nmi, axis=0))
-    # print("std: ", np.var(nmi, axis=0))
+    nmi_pca = np.stack(all_metrics_pca, axis=0)
+
     print("mean:", np.mean(nmi))
     print("std: ", np.var(nmi))
-
-    nmi_pca = np.stack(all_metrics_pca, axis=0)
-    # print("mean:", np.mean(nmi_pca, axis=0))
-    # print("std: ", np.var(nmi_pca, axis=0))
     print("mean:", np.mean(nmi_pca))
     print("std: ", np.var(nmi_pca))
 
