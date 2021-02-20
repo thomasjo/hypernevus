@@ -1,9 +1,11 @@
-.vscode/
+.env
+.envrc
+.vscode
 
-# Python cruft.
-.venv/
-.ipynb_checkpoints/
-*.egg-info/
+# Python.
+.venv
+.ipynb_checkpoints
+*.egg-info
 
 # Project-specific.
 /data
