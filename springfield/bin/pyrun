@@ -6,7 +6,7 @@ args="$@"
 
 # Copy files from persistent storage to boost I/O performance.
 echo "Copying data... "
-rsync -avP --inplace --no-compress ./data/64 /data
+rsync -avP --inplace --no-compress /storage/data/32 /data/32
 
 # Execute command.
 echo "Executing python with args"

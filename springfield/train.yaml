@@ -12,11 +12,11 @@ spec:
         image: thomasjo/hypernevus
         workingDir: /storage/hypernevus
         command:
-        # - python3
-        - bin/pyrun
+        - python3
+        # - bin/pyrun
         - src/train_model.py
-        - --data-dir=/data/64
-        - --output-dir=output/bn
+        - --data-dir=/data/32
+        - --output-dir=output
         - --batch-size=512
         stdin: true
         tty: true

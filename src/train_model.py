@@ -21,12 +21,16 @@ from hypernevus.utils import ensure_reproducibility
 
 
 def main(args):
+    # Create timestamped output directory.
+    timestamp = datetime.utcnow().strftime("%Y-%m-%d-%H%M")
+    args.output_dir = args.output_dir / timestamp
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+
     # TODO(thomasjo): Make this configurable?
     ensure_reproducibility(seed=42)
 
     # TODO(thomasjo): Make this configurable?
     bands = slice(0, 115)
-
     dataset = prepare_dataset(args.data_dir, bands)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=True, pin_memory=True, num_workers=1)
 
@@ -37,16 +41,12 @@ def main(args):
 
     input_size = test_batch.shape[1:]
 
-    model = Autoencoder(input_size).to(device=args.device)
-    optimizer = optim.Adam(model.parameters())
-    criterion = nn.BCELoss()
-
-    torchsummary.summary(model, input_size=input_size, batch_size=args.batch_size, device=str(args.device))
-
-    # Create timestamped output directory.
-    timestamp = datetime.utcnow().strftime("%Y-%m-%d-%H%M")
-    args.output_dir = args.output_dir / timestamp
-    args.output_dir.mkdir(parents=True, exist_ok=True)
+    model = Autoencoder(input_size)
+    model = model.to(device=args.device)
+    optimizer = optim.Adam(model.parameters(), lr=1e-4)
+    # criterion = nn.BCELoss(reduction="sum")
+    # criterion = nn.MSELoss(reduction="sum")
+    criterion = nn.MSELoss()
 
     def train_step(engine, batch):
         model.train()
@@ -76,10 +76,6 @@ def main(args):
             )
         )
 
-    # Configure model checkpoints.
-    checkpoint_handler = ModelCheckpoint(str(args.output_dir), filename_prefix="ckpt", n_saved=None)
-    trainer.add_event_handler(Events.EPOCH_COMPLETED, checkpoint_handler, {"model": model})
-
     # Visualize training progress using test patches.
     @trainer.on(Events.EPOCH_COMPLETED)
     def vizualize_reconstruction(engine: Engine):
@@ -88,6 +84,13 @@ def main(args):
         plot_image_grid(ax1, x, band=50, nrow=4)
         plot_image_grid(ax2, x_hat, band=50, nrow=4)
         fig.savefig(args.output_dir / f"epoch-{engine.state.epoch}.png", dpi=300)
+
+    # Configure model checkpoints.
+    checkpoint_handler = ModelCheckpoint(str(args.output_dir), filename_prefix="ckpt", n_saved=None)
+    trainer.add_event_handler(Events.EPOCH_COMPLETED, checkpoint_handler, {"model": model})
+
+    # TODO(thomasjo): Pipe to debug log.
+    torchsummary.summary(model, input_size=input_size, batch_size=args.batch_size, device=str(args.device))
 
     # Start model optimization.
     trainer.run(dataloader, max_epochs=50)
@@ -113,8 +116,9 @@ def parse_args():
 
     parser.add_argument("--data-dir", type=Path, required=True, metavar="PATH", help="dataset directory to use for training and evaluation")
     parser.add_argument("--output-dir", type=Path, required=True, metavar="PATH", help="path to output directory")
-    parser.add_argument("--device", type=torch.device, default="cuda", help="target device for PyTorch operations")
+
     parser.add_argument("--batch-size", type=int, default=512, help="number of examples per mini-batch.")
+    parser.add_argument("--device", type=torch.device, default="cuda", help="target device for PyTorch operations")
 
     return parser.parse_args()
 

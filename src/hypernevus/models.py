@@ -12,41 +12,54 @@ class Autoencoder(nn.Module):
         self.encoder = nn.Sequential(
             # conv1
             nn.Conv2d(c, 64, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
-            nn.BatchNorm2d(64),
+            nn.ReLU(),
+            # nn.BatchNorm2d(64),
             nn.MaxPool2d(2, 2),
             # conv2
-            nn.Conv2d(64, 128, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
-            nn.BatchNorm2d(128),
+            nn.Conv2d(64, 32, kernel_size=3, padding=1),
+            nn.ReLU(),
+            # nn.BatchNorm2d(32),
             nn.MaxPool2d(2, 2),
-            # conv3
-            nn.Conv2d(128, 256, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
-            nn.BatchNorm2d(256),
-            nn.MaxPool2d(2, 2),
-            # fc
+            # conv2
+            # nn.Conv2d(64, 128, kernel_size=3, padding=1),
+            # nn.ReLU(),
+            # nn.BatchNorm2d(128),
+            # nn.MaxPool2d(2, 2),
+            # # conv3
+            # nn.Conv2d(128, 256, kernel_size=3, padding=1),
+            # nn.ReLU(),
+            # nn.BatchNorm2d(256),
+            # nn.MaxPool2d(2, 2),
+            # # fc
             nn.Flatten(),
-            nn.Linear(4096, 256),
+            # # nn.Linear(4096, 2048),
         )
 
         self.decoder = nn.Sequential(
             # fc
-            nn.Linear(256, 4096),
-            nn.Unflatten(dim=1, unflattened_size=(256, 4, 4)),
+            # nn.Linear(2048, 4096),
+            nn.Unflatten(dim=1, unflattened_size=(32, 8, 8)),
+            # nn.Unflatten(dim=1, unflattened_size=(256, 4, 4)),
             # upconv3
-            nn.Upsample(scale_factor=2),
-            nn.Conv2d(256, 128, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
-            nn.BatchNorm2d(128),
+            # nn.Upsample(scale_factor=2),
+            # nn.Conv2d(256, 128, kernel_size=3, padding=1),
+            # nn.ReLU(),
+            # nn.BatchNorm2d(128),
             # upconv2
-            nn.Upsample(scale_factor=2),
-            nn.Conv2d(128, 64, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
-            nn.BatchNorm2d(64),
+            # nn.Upsample(scale_factor=2),
+            # nn.Conv2d(128, 64, kernel_size=3, padding=1),
+            # nn.ReLU(),
+            # nn.BatchNorm2d(64),
+            # upconv2
+            nn.Upsample(scale_factor=2, mode="bicubic"),
+            nn.Conv2d(32, 64, kernel_size=3, padding=1),
+            # nn.ConvTranspose2d(32, 64, kernel_size=3, padding=1, stride=2),
+            # nn.ReLU(),
+            # nn.BatchNorm2d(64),
             # upconv1
-            nn.Upsample(scale_factor=2),
+            nn.Upsample(scale_factor=2, mode="bicubic"),
             nn.Conv2d(64, c, kernel_size=3, padding=1),
+            # nn.ConvTranspose2d(64, c, kernel_size=3, padding=1, stride=2),
             nn.Sigmoid(),
         )
 
